@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f4ed">
+  <meta name="description" content="Un espacio para conocer la Biblia, compartir prédicas y estudios, y reflexionar.">
+  <title>Un momento de Biblia</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="Un momento de Biblia, inicio">Un momento de Biblia</a>
+      <nav aria-label="Navegación principal">
+        <a href="#conocer">Conocer la Biblia</a>
+        <a href="#materiales">Prédicas y estudios</a>
+        <a href="#reflexion">Reflexionar</a>
+      </nav>
+    </header>
+
+    <section class="hero" aria-labelledby="titulo-principal">
+      <p class="eyebrow">Lectura · reflexión · esperanza</p>
+      <h1 id="titulo-principal">Una palabra para cada camino.</h1>
+      <p class="hero-copy">Un pequeño espacio para acercarte a la Biblia, descubrir su mensaje y encontrar inspiración para el día.</p>
+      <a class="button" href="#conocer">Comienza a explorar</a>
+    </section>
+
+    <main>
+      <section id="conocer" aria-labelledby="titulo-conocer">
+        <div class="section-heading">
+          <p class="eyebrow">Una biblioteca de fe</p>
+          <h2 id="titulo-conocer">¿Qué encontrarás en la Biblia?</h2>
+          <p class="intro">La Biblia reúne libros escritos en distintas épocas. Sus relatos, poemas, enseñanzas y cartas hablan sobre la relación entre Dios y las personas, la justicia, el amor y la esperanza.</p>
+        </div>
+
+        <div class="cards">
+          <article class="card">
+            <p class="card-label">Primera parte</p>
+            <h3>Antiguo Testamento</h3>
+            <p>Incluye relatos de los orígenes, la historia del pueblo de Israel, leyes, poesía y mensajes de los profetas. Entre sus libros conocidos están Génesis, Salmos e Isaías.</p>
+          </article>
+          <article class="card">
+            <p class="card-label">Segunda parte</p>
+            <h3>Nuevo Testamento</h3>
+            <p>Presenta la vida y las enseñanzas de Jesús, los comienzos de las primeras comunidades cristianas y cartas de orientación. Comienza con los cuatro Evangelios.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="materials" id="materiales" aria-labelledby="titulo-materiales">
+        <div class="section-heading">
+          <p class="eyebrow">Biblioteca de estudio</p>
+          <h2 id="titulo-materiales">Prédicas y estudios</h2>
+          <p class="intro">Guarda enseñanzas, pasajes y apuntes para volver a ellos durante tu estudio. Los materiales se guardan en este navegador.</p>
+        </div>
+
+        <form class="material-form" id="material-form">
+          <div class="form-grid">
+            <div class="field">
+              <label for="material-titulo">Título</label>
+              <input id="material-titulo" name="title" type="text" maxlength="100" required>
+            </div>
+            <div class="field">
+              <label for="material-tipo">Tipo de material</label>
+              <select id="material-tipo" name="type" required>
+                <option value="Estudio bíblico">Estudio bíblico</option>
+                <option value="Prédica">Prédica</option>
+              </select>
+            </div>
+            <div class="field field-full">
+              <label for="material-referencia">Referencia bíblica</label>
+              <input id="material-referencia" name="reference" type="text" maxlength="120" placeholder="Ej.: Juan 15:1-8">
+            </div>
+            <div class="field field-full">
+              <label for="material-resumen">Resumen o enseñanza principal</label>
+              <textarea id="material-resumen" name="summary" rows="4" maxlength="2000" required></textarea>
+            </div>
+            <div class="field field-full">
+              <label for="material-apuntes">Preguntas para reflexionar o apuntes <span>(opcional)</span></label>
+              <textarea id="material-apuntes" name="notes" rows="3" maxlength="1500"></textarea>
+            </div>
+          </div>
+          <button class="button form-button" type="submit">Guardar material</button>
+          <p class="form-status" id="form-status" role="status" aria-live="polite"></p>
+        </form>
+
+        <article class="material-detail" id="material-detail" hidden></article>
+        <div class="material-list" id="material-list" aria-live="polite"></div>
+      </section>
+
+      <section class="reflection" id="reflexion" aria-labelledby="titulo-reflexion">
+        <blockquote>
+          <p id="titulo-reflexion">«Jehová es mi pastor; nada me faltará.»</p>
+          <footer>Salmos 23:1 · Reina-Valera 1909</footer>
+        </blockquote>
+        <a class="button" href="https://www.biblegateway.com/passage/?search=Salmos%2023&version=RVR1909" target="_blank" rel="noopener noreferrer">Leer el salmo completo ↗</a>
+      </section>
+      <p class="reading-note">Una invitación a leer con calma y consultar el texto completo en tu traducción preferida.</p>
+    </main>
+
+    <footer class="footer">
+      <p>Un espacio sencillo para leer, aprender y reflexionar.</p>
+    </footer>
+  </div>
+  <script type="module" src="script.js"></script>
+</body>
+</html>
