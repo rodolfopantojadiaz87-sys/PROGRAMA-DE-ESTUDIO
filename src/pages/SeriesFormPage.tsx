@@ -17,6 +17,9 @@ function createEmptySeries(): Series {
     updatedAt: now,
     name: "",
     description: "",
+    topic: "",
+    mainBibleReference: "",
+    status: "preparation",
     imagePath: null,
     startsOn: null,
     endsOn: null,
@@ -50,6 +53,7 @@ export function SeriesFormPage() {
   const [search, setSearch] = useState("");
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const initializedRoute = useRef<string | null>(null);
+  const availableContentSearchRef = useRef<HTMLInputElement>(null);
   const isLoading = seriesLoading || sermonsLoading || studiesLoading;
 
   useEffect(() => {
@@ -71,7 +75,9 @@ export function SeriesFormPage() {
       title: sermon.title,
       reference: sermon.mainBibleReference,
       type: "sermon" as const,
-      seriesId: sermon.seriesId,
+      seriesIds: sermon.seriesIds ?? (sermon.seriesId ? [sermon.seriesId] : []),
+      status: sermon.status,
+      date: sermon.date,
     })),
     ...studies.map((study) => ({
       id: study.id,
@@ -79,12 +85,14 @@ export function SeriesFormPage() {
       reference: study.mainBibleReference,
       type: "study" as const,
       seriesId: study.seriesId,
+      status: study.status,
+      date: null,
     })),
   ];
   const selectedContentKeys = new Set((draft?.items ?? []).map((item) => `${item.contentType}:${item.contentId}`));
   const normalizedSearch = search.trim().toLocaleLowerCase();
   const availableContent = allContent.filter((item) =>
-    (!item.seriesId || item.seriesId === draft?.id) &&
+    (item.type === "sermon" || !item.seriesId || item.seriesId === draft?.id) &&
     !selectedContentKeys.has(`${item.type}:${item.id}`) &&
     (!normalizedSearch || `${item.title} ${item.reference}`.toLocaleLowerCase().includes(normalizedSearch)),
   );
@@ -144,6 +152,26 @@ export function SeriesFormPage() {
     return allContent.find((content) => content.id === item.contentId && content.type === item.contentType)?.reference ?? "";
   }
 
+  function getContentDetails(item: SeriesItem): string {
+    const content = allContent.find((candidate) => candidate.id === item.contentId && candidate.type === item.contentType);
+    if (!content) return item.contentType === "sermon" ? "Sermón no disponible" : "Estudio no disponible";
+    const status = content.status === "draft" ? "Pendiente"
+      : content.status === "prepared" ? "En preparación"
+        : content.status === "preached" ? "Predicado" : "Archivado";
+    const date = content.date ? formatDate(content.date) : "";
+    return [
+      item.contentType === "sermon" ? "Sermón" : "Estudio",
+      getContentReference(item),
+      status,
+      date,
+    ].filter(Boolean).join(" · ");
+  }
+
+  function formatDate(date: string): string {
+    const value = new Date(`${date}T00:00:00`);
+    return Number.isNaN(value.getTime()) ? date : new Intl.DateTimeFormat("es", { dateStyle: "medium" }).format(value);
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!draft) return;
@@ -167,6 +195,30 @@ export function SeriesFormPage() {
       return;
     }
     navigate("/series");
+  }
+
+  function handleCreateSermon() {
+    if (!draft) return;
+    if (!draft.name.trim()) {
+      setFormError("Escribe un título para la serie antes de crear un sermón.");
+      return;
+    }
+    if (draft.startsOn && draft.endsOn && draft.endsOn < draft.startsOn) {
+      setFormError("La fecha de finalización no puede ser anterior a la fecha de inicio.");
+      return;
+    }
+    const updated = {
+      ...draft,
+      name: draft.name.trim(),
+      description: draft.description.trim(),
+      items: draft.items.map((item, order) => ({ ...item, order })),
+      updatedAt: new Date().toISOString(),
+    };
+    if (!saveSeries(updated)) {
+      setFormError("No se pudo guardar la serie antes de crear el sermón.");
+      return;
+    }
+    navigate(`/sermons/new?seriesId=${encodeURIComponent(updated.id)}`);
   }
 
   if (isLoading || (id && !draft && existingSeries)) return <p className="form-loading" role="status">Cargando serie...</p>;
@@ -206,6 +258,23 @@ export function SeriesFormPage() {
               <span>Descripción</span>
               <textarea className="series-description-input" maxLength={1200} onChange={(event) => updateField("description", event.target.value)} placeholder="Describe el propósito y tema de esta serie..." rows={3} value={draft.description} />
             </label>
+            <label className="form-field">
+              <span>Tema central</span>
+              <input maxLength={160} onChange={(event) => updateField("topic", event.target.value)} placeholder="Ej.: La esperanza en tiempos difíciles" value={draft.topic} />
+            </label>
+            <label className="form-field">
+              <span>Pasaje bíblico principal <small>(opcional)</small></span>
+              <input maxLength={120} onChange={(event) => updateField("mainBibleReference", event.target.value)} placeholder="Ej.: Filipenses 1:3-11" value={draft.mainBibleReference} />
+            </label>
+            <label className="form-field">
+              <span>Estado de la serie</span>
+              <select onChange={(event) => updateField("status", event.target.value as Series["status"])} value={draft.status}>
+                <option value="preparation">En preparación</option>
+                <option value="active">Activa</option>
+                <option value="finished">Finalizada</option>
+              </select>
+              <small className="series-status-help">Puedes agregar sermones aunque marques la serie como finalizada.</small>
+            </label>
             <label className="form-field form-field-wide">
               <span>Imagen de portada <small>(URL opcional)</small></span>
               <input maxLength={1000} onChange={(event) => updateField("imagePath", event.target.value || null)} placeholder="https://..." type="url" value={draft.imagePath ?? ""} />
@@ -224,12 +293,14 @@ export function SeriesFormPage() {
         <section aria-labelledby="series-items-title" className="series-builder">
           <div className="editor-section-title">
             <span className="editor-step">02</span>
-            <div><h3 id="series-items-title">Contenido ordenado</h3><p>Arrastra los materiales o usa los controles para cambiar su orden.</p></div>
+            <div><h3 id="series-items-title">Sermones de esta serie</h3><p>Agrega y ordena sermones ahora o en cualquier momento.</p></div>
+            <Button onClick={() => availableContentSearchRef.current?.focus()} type="button" variant="secondary">Agregar sermón</Button>
+            <Button icon={<Plus size={15} />} onClick={handleCreateSermon} type="button" variant="secondary">Crear sermón</Button>
           </div>
           <div className="series-builder-grid">
             <Card className="series-items-card">
               <div className="series-subheading">
-                <div><h4>En esta serie</h4><span>{draft.items.length} {draft.items.length === 1 ? "material" : "materiales"}</span></div>
+                <div><h4>Sermones y materiales</h4><span>{draft.items.length} {draft.items.length === 1 ? "elemento asociado" : "elementos asociados"}</span></div>
               </div>
               {draft.items.length === 0 ? (
                 <div className="series-items-empty">
@@ -254,8 +325,10 @@ export function SeriesFormPage() {
                         <span className="series-order-number">{String(index + 1).padStart(2, "0")}</span>
                         <span aria-hidden="true" className="series-content-icon"><ContentIcon size={15} /></span>
                         <span className="series-edit-copy">
-                          <strong>{getContentTitle(item)}</strong>
-                          <small>{item.contentType === "sermon" ? "Sermón" : "Estudio"}{getContentReference(item) ? ` · ${getContentReference(item)}` : ""}</small>
+                          <Link to={item.contentType === "sermon" ? `/sermons/${item.contentId}/edit` : `/studies/${item.contentId}/edit`}>
+                            <strong>{getContentTitle(item)}</strong>
+                          </Link>
+                          <small>{getContentDetails(item)}</small>
                         </span>
                         <span className="series-item-order-actions">
                           <button aria-label={`Mover ${getContentTitle(item)} arriba`} disabled={index === 0} onClick={() => moveItem(index, -1)} type="button"><ArrowUp size={14} /></button>
@@ -271,11 +344,11 @@ export function SeriesFormPage() {
 
             <Card className="series-available-card">
               <div className="series-subheading">
-                <div><h4>Añadir materiales</h4><span>Sermones y estudios disponibles</span></div>
+                <div><h4>Desde tu biblioteca</h4><span>Sermones y estudios disponibles</span></div>
               </div>
               <label className="sermon-search series-content-search">
                 <span className="sr-only">Buscar materiales</span>
-                <input onChange={(event) => setSearch(event.target.value)} placeholder="Buscar material..." type="search" value={search} />
+                <input ref={availableContentSearchRef} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar material..." type="search" value={search} />
               </label>
               {availableContent.length === 0 ? (
                 <div className="series-items-empty">

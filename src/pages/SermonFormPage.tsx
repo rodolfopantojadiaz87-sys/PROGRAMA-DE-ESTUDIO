@@ -12,17 +12,18 @@ import {
   Trash2,
 } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { TagPicker } from "../components/ui/TagPicker";
 import { useSermons } from "../hooks/useSermons";
+import { useSeries } from "../hooks/useSeries";
 import { useTags } from "../hooks/useTags";
 import type { ContentBlock, ContentStatus, ContentVisibility, Sermon } from "../types/domain";
 
 const statuses: { value: ContentStatus; label: string }[] = [
   { value: "draft", label: "Borrador" },
-  { value: "prepared", label: "Preparado" },
+  { value: "prepared", label: "En preparación" },
   { value: "preached", label: "Predicado" },
   { value: "archived", label: "Archivado" },
 ];
@@ -63,6 +64,7 @@ function createEmptySermon(): Sermon {
     mainBibleReference: "",
     topic: "",
     seriesId: null,
+    seriesIds: [],
     date: null,
     author: "",
     status: "draft",
@@ -319,7 +321,10 @@ function SectionEditor({
 export function SermonFormPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { sermons, isLoading, error, saveSermon } = useSermons();
+  const [searchParams] = useSearchParams();
+  const initialSeriesId = searchParams.get("seriesId");
+  const { sermons, isLoading: sermonsLoading, error, saveSermon } = useSermons();
+  const { series, isLoading: seriesLoading } = useSeries();
   const { tags, error: tagError } = useTags();
   const existingSermon = id ? sermons.find((sermon) => sermon.id === id) : undefined;
   const [sermon, setSermon] = useState<Sermon | null>(null);
@@ -327,6 +332,7 @@ export function SermonFormPage() {
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
   const initializedRoute = useRef<string | null>(null);
   const lastSavedContent = useRef<string | null>(null);
+  const isLoading = sermonsLoading || seriesLoading;
 
   useEffect(() => {
     if (isLoading) return;
@@ -336,6 +342,7 @@ export function SermonFormPage() {
     if (id && existingSermon) {
       const loadedSermon = {
         ...existingSermon,
+        seriesIds: existingSermon.seriesIds ?? (existingSermon.seriesId ? [existingSermon.seriesId] : []),
         privateFields: existingSermon.privateFields ?? [],
         sections: [...existingSermon.sections].sort((a, b) => a.order - b.order),
       };
@@ -343,10 +350,16 @@ export function SermonFormPage() {
       lastSavedContent.current = JSON.stringify({ ...loadedSermon, updatedAt: "" });
       initializedRoute.current = routeKey;
     } else if (!id) {
-      setSermon(createEmptySermon());
+      const emptySermon = createEmptySermon();
+      const selectedSeries = series.find((item) => item.id === initialSeriesId);
+      if (selectedSeries) {
+        emptySermon.seriesId = selectedSeries.id;
+        emptySermon.seriesIds = [selectedSeries.id];
+      }
+      setSermon(emptySermon);
       initializedRoute.current = routeKey;
     }
-  }, [id, existingSermon, isLoading]);
+  }, [id, existingSermon, initialSeriesId, isLoading, series]);
 
   useEffect(() => {
     if (!sermon || !sermon.title.trim()) return;
@@ -371,6 +384,15 @@ export function SermonFormPage() {
 
   function updateSermonField<K extends keyof Sermon>(key: K, value: Sermon[K]) {
     setSermon((current) => current ? { ...current, [key]: value } : current);
+  }
+
+  function toggleSeriesAssignment(seriesId: string, selected: boolean) {
+    if (!sermon) return;
+    const currentIds = sermon.seriesIds ?? (sermon.seriesId ? [sermon.seriesId] : []);
+    const seriesIds = selected
+      ? [...new Set([...currentIds, seriesId])]
+      : currentIds.filter((idToRemove) => idToRemove !== seriesId);
+    setSermon({ ...sermon, seriesIds, seriesId: seriesIds[0] ?? null });
   }
 
   function togglePrivateField(key: SermonTextField) {
@@ -454,7 +476,7 @@ export function SermonFormPage() {
       return;
     }
     lastSavedContent.current = JSON.stringify({ ...updatedSermon, updatedAt: "" });
-    navigate("/sermons");
+    navigate(initialSeriesId ? `/series/${encodeURIComponent(initialSeriesId)}/edit` : "/sermons");
   }
 
   if (isLoading || (id && !sermon && existingSermon)) return <p className="form-loading" role="status">Cargando sermón...</p>;
@@ -499,7 +521,7 @@ export function SermonFormPage() {
               <input maxLength={100} onChange={(event) => updateSermonField("topic", event.target.value)} placeholder="Ej.: Esperanza" value={sermon.topic} />
             </label>
             <label className="form-field">
-              <span>Fecha</span>
+              <span>Fecha prevista de predicación</span>
               <input onChange={(event) => updateSermonField("date", event.target.value || null)} type="date" value={sermon.date ?? ""} />
             </label>
             <label className="form-field">
@@ -512,6 +534,25 @@ export function SermonFormPage() {
                 {statuses.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
               </select>
             </label>
+            <fieldset className="form-field form-field-wide series-assignment-field">
+              <legend>Series <small>(opcional; puedes elegir más de una)</small></legend>
+              {series.length > 0 ? (
+                <div className="series-assignment-options">
+                  {series.map((item) => (
+                    <label key={item.id}>
+                      <input
+                        checked={(sermon.seriesIds ?? (sermon.seriesId ? [sermon.seriesId] : [])).includes(item.id)}
+                        onChange={(event) => toggleSeriesAssignment(item.id, event.target.checked)}
+                        type="checkbox"
+                      />
+                      <span>{item.name}</span>
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <p className="series-assignment-empty">Aún no hay series. Puedes crear una desde la sección Series.</p>
+              )}
+            </fieldset>
           </div>
           <TagPicker
             onChange={(tagIds) => updateSermonField("tagIds", tagIds)}

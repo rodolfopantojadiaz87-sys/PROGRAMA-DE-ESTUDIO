@@ -1,6 +1,7 @@
 export type ContentStatus = "draft" | "prepared" | "preached" | "archived";
 export type ContentVisibility = "projectable" | "private";
 export type UserRole = "owner" | "editor" | "viewer";
+export type SeriesStatus = "preparation" | "active" | "finished";
 
 export interface OwnedEntity {
   id: string;
@@ -34,6 +35,7 @@ export interface Sermon extends OwnedEntity {
   mainBibleReference: string;
   topic: string;
   seriesId: string | null;
+  seriesIds?: string[];
   date: string | null;
   author: string;
   status: ContentStatus;
@@ -85,6 +87,9 @@ export interface BibleStudy extends OwnedEntity {
 export interface Series extends OwnedEntity {
   name: string;
   description: string;
+  topic: string;
+  mainBibleReference: string;
+  status: SeriesStatus;
   imagePath: string | null;
   startsOn: string | null;
   endsOn: string | null;

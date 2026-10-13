@@ -11,6 +11,9 @@ function isSeries(value: unknown): value is Series {
     typeof series.ownerId === "string" &&
     typeof series.name === "string" &&
     typeof series.description === "string" &&
+    (series.topic === undefined || typeof series.topic === "string") &&
+    (series.mainBibleReference === undefined || typeof series.mainBibleReference === "string") &&
+    (series.status === undefined || ["preparation", "active", "finished"].includes(series.status)) &&
     (series.imagePath === null || typeof series.imagePath === "string") &&
     (series.startsOn === null || typeof series.startsOn === "string") &&
     (series.endsOn === null || typeof series.endsOn === "string") &&
@@ -48,7 +51,12 @@ export const seriesStorage = {
     if (!compatibleRecords.every(isSeries)) {
       throw new Error("El almacenamiento de series tiene un formato no válido.");
     }
-    return compatibleRecords;
+    return compatibleRecords.map((record) => ({
+      ...record,
+      topic: record.topic ?? "",
+      mainBibleReference: record.mainBibleReference ?? "",
+      status: record.status ?? "active",
+    }));
   },
 
   save(series: Series[]): void {

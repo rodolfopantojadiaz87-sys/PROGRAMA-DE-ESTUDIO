@@ -48,11 +48,18 @@ function createEntry(
 
 export function buildLibraryIndex({ sermons, studies, series, tags }: LibrarySource): LibraryEntry[] {
   const seriesNames = new Map(series.map((item) => [item.id, item.name]));
+  const sermonSeriesNames = new Map(sermons.map((sermon) => {
+    const relatedSeries = series.filter((item) =>
+      item.items.some((entry) => entry.contentType === "sermon" && entry.contentId === sermon.id),
+    );
+    const legacySeries = sermon.seriesId ? seriesNames.get(sermon.seriesId) : undefined;
+    return [sermon.id, [...new Set([...relatedSeries.map((item) => item.name), ...(legacySeries ? [legacySeries] : [])])].join(" ")] as const;
+  }));
   const tagNames = new Map(tags.map((tag) => [tag.id, tag.name]));
   const entries: LibraryEntry[] = [];
 
   sermons.forEach((sermon) => {
-    const seriesName = sermon.seriesId ? seriesNames.get(sermon.seriesId) ?? "" : "";
+    const seriesName = sermonSeriesNames.get(sermon.id) ?? "";
     const sermonTags = sermon.tagIds.map((tagId) => tagNames.get(tagId)).filter((name): name is string => Boolean(name));
     const href = `/sermons/${sermon.id}/edit`;
     entries.push(createEntry({

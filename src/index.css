@@ -3036,6 +3036,105 @@ body {
   color: var(--pb-muted);
 }
 
+.series-topic,
+.series-progress {
+  margin: 8px 0 0;
+  color: var(--pb-muted);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.series-progress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  border-top: 1px solid var(--pb-line);
+  padding-top: 10px;
+}
+
+.series-progress strong {
+  color: var(--pb-ink);
+}
+
+.series-assignment-field {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.series-assignment-field legend {
+  margin-bottom: 9px;
+  color: var(--pb-muted);
+  font-size: 11px;
+}
+
+.series-assignment-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.series-assignment-options label {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--pb-line);
+  border-radius: 6px;
+  background: var(--pb-panel-raised);
+  padding: 0 10px;
+  color: var(--pb-ink);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.series-assignment-options input {
+  width: 16px;
+  min-height: 16px;
+  flex: 0 0 16px;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--pb-gold);
+}
+
+.series-status-help {
+  color: var(--pb-muted);
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.series-assignment-empty {
+  margin: 0;
+  color: var(--pb-muted);
+  font-size: 10px;
+}
+
+.series-edit-copy > a {
+  overflow: hidden;
+  color: var(--pb-ink);
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.series-edit-copy > a:hover {
+  color: var(--pb-gold-light);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.series-builder > .editor-section-title {
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.series-builder > .editor-section-title > button {
+  margin-left: auto;
+}
+
 .outline-point-header,
 .outline-point-body,
 .sermon-form-actions,

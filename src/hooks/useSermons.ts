@@ -47,14 +47,14 @@ export function useSermons() {
 
   const persist = useCallback((nextSermons: Sermon[]): boolean => {
     try {
-      sermonStorage.save(nextSermons);
-      setState({ sermons: nextSermons, isLoading: false, error: null });
+      const savedSermons = seriesRepository.saveSermons(nextSermons);
+      setState({ sermons: savedSermons, isLoading: false, error: null });
       return true;
     } catch (error) {
       console.error("No se pudieron guardar los sermones.", error);
       setState((current) => ({
         ...current,
-        error: "No se pudieron guardar los cambios. Revisa el espacio disponible del navegador.",
+        error: "No se pudieron guardar los cambios. Comprueba que las series seleccionadas estén disponibles e inténtalo de nuevo.",
       }));
       return false;
     }

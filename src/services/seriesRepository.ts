@@ -9,12 +9,12 @@ interface MembershipUpdates {
   studies: BibleStudy[];
 }
 
-function createSeriesItems(seriesId: string, items: SeriesItem[]): SeriesItem[] {
+function createSeriesItems(seriesId: string, ownerId: string, items: SeriesItem[]): SeriesItem[] {
   const now = new Date().toISOString();
   return items.map((item, order) => ({
     ...item,
     id: item.id || crypto.randomUUID(),
-    ownerId: item.ownerId || "local-user",
+    ownerId: item.ownerId || ownerId,
     seriesId,
     order,
     createdAt: item.createdAt || now,
@@ -22,30 +22,69 @@ function createSeriesItems(seriesId: string, items: SeriesItem[]): SeriesItem[] 
   }));
 }
 
-function updateContentMembership(
-  sermons: Sermon[],
-  studies: BibleStudy[],
-  seriesId: string,
-  removedItems: SeriesItem[],
-  addedItems: SeriesItem[],
-): { sermons: Sermon[]; studies: BibleStudy[] } {
-  const removedSermons = new Set(removedItems.filter((item) => item.contentType === "sermon").map((item) => item.contentId));
-  const removedStudies = new Set(removedItems.filter((item) => item.contentType === "study").map((item) => item.contentId));
-  const sermonIds = new Set(addedItems.filter((item) => item.contentType === "sermon").map((item) => item.contentId));
-  const studyIds = new Set(addedItems.filter((item) => item.contentType === "study").map((item) => item.contentId));
+function seriesIdsForSermon(series: Series[], sermonId: string): string[] {
+  return series
+    .filter((item) => item.items.some((entry) => entry.contentType === "sermon" && entry.contentId === sermonId))
+    .map((item) => item.id);
+}
 
-  return {
-    sermons: sermons.map((sermon) => {
-      if (sermonIds.has(sermon.id)) return { ...sermon, seriesId, updatedAt: new Date().toISOString() };
-      if (removedSermons.has(sermon.id) && sermon.seriesId === seriesId) return { ...sermon, seriesId: null, updatedAt: new Date().toISOString() };
-      return sermon;
-    }),
-    studies: studies.map((study) => {
-      if (studyIds.has(study.id)) return { ...study, seriesId, updatedAt: new Date().toISOString() };
-      if (removedStudies.has(study.id) && study.seriesId === seriesId) return { ...study, seriesId: null, updatedAt: new Date().toISOString() };
-      return study;
-    }),
-  };
+function withSermonMemberships(sermons: Sermon[], series: Series[]): Sermon[] {
+  return sermons.map((sermon) => {
+    const seriesIds = seriesIdsForSermon(series, sermon.id);
+    return {
+      ...sermon,
+      seriesIds,
+      seriesId: seriesIds[0] ?? null,
+    };
+  });
+}
+
+function withStudyMemberships(studies: BibleStudy[], series: Series[]): BibleStudy[] {
+  return studies.map((study) => ({
+    ...study,
+    seriesId: series.find((item) =>
+      item.items.some((entry) => entry.contentType === "study" && entry.contentId === study.id),
+    )?.id ?? null,
+  }));
+}
+
+function addLegacyAssociations(series: Series[], sermons: Sermon[], studies: BibleStudy[]): Series[] {
+  return series.map((item) => {
+    const items = [...item.items];
+    sermons.forEach((sermon) => {
+      if (sermon.seriesId === item.id && !items.some((entry) =>
+        entry.contentType === "sermon" && entry.contentId === sermon.id,
+      )) {
+        items.push({
+          id: crypto.randomUUID(),
+          ownerId: item.ownerId,
+          seriesId: item.id,
+          contentId: sermon.id,
+          contentType: "sermon",
+          order: items.length,
+          createdAt: sermon.createdAt,
+          updatedAt: sermon.updatedAt,
+        });
+      }
+    });
+    studies.forEach((study) => {
+      if (study.seriesId === item.id && !items.some((entry) =>
+        entry.contentType === "study" && entry.contentId === study.id,
+      )) {
+        items.push({
+          id: crypto.randomUUID(),
+          ownerId: item.ownerId,
+          seriesId: item.id,
+          contentId: study.id,
+          contentType: "study",
+          order: items.length,
+          createdAt: study.createdAt,
+          updatedAt: study.updatedAt,
+        });
+      }
+    });
+    return { ...item, items: items.sort((a, b) => a.order - b.order) };
+  });
 }
 
 function persistMembership(updates: MembershipUpdates): void {
@@ -74,70 +113,113 @@ function persistMembership(updates: MembershipUpdates): void {
 
 export const seriesRepository = {
   list(): Series[] {
-    return seriesStorage.list().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    const series = seriesStorage.list();
+    const hydrated = addLegacyAssociations(series, sermonStorage.list(), studyStorage.list());
+    return hydrated.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   },
 
   save(series: Series): Series[] {
-    const allSeries = seriesStorage.list();
-    const existing = allSeries.find((item) => item.id === series.id);
     const sermonRecords = sermonStorage.list();
     const studyRecords = studyStorage.list();
-    const items = createSeriesItems(series.id, series.items);
+    const allSeries = addLegacyAssociations(seriesStorage.list(), sermonRecords, studyRecords);
+    const existing = allSeries.find((item) => item.id === series.id);
+    if (existing && existing.ownerId !== series.ownerId) {
+      throw new Error("No se puede cambiar el propietario de una serie existente.");
+    }
+    const items = createSeriesItems(series.id, series.ownerId, series.items);
     const seenItems = new Set<string>();
 
     items.forEach((item) => {
       const key = `${item.contentType}:${item.contentId}`;
       if (seenItems.has(key)) throw new Error("No se puede añadir dos veces el mismo material a una serie.");
       seenItems.add(key);
-      const exists = item.contentType === "sermon"
-        ? sermonRecords.some((sermon) => sermon.id === item.contentId)
-        : studyRecords.some((study) => study.id === item.contentId);
-      if (!exists) throw new Error("Uno de los materiales seleccionados ya no está disponible.");
+      const content = item.contentType === "sermon"
+        ? sermonRecords.find((sermon) => sermon.id === item.contentId)
+        : studyRecords.find((study) => study.id === item.contentId);
+      if (!content || content.ownerId !== series.ownerId || item.ownerId !== series.ownerId) {
+        throw new Error("Uno de los materiales seleccionados no pertenece a esta biblioteca.");
+      }
     });
 
-    const selectedKeys = new Set(items.map((item) => `${item.contentType}:${item.contentId}`));
-    const removedItems = existing?.items.filter((item) => !selectedKeys.has(`${item.contentType}:${item.contentId}`)) ?? [];
     const nextSeries = {
       ...series,
       items,
       updatedAt: new Date().toISOString(),
     };
-    const otherSeries = allSeries
-      .filter((item) => item.id !== series.id)
-      .map((item) => {
-        const remainingItems = item.items.filter((seriesItem) => !selectedKeys.has(`${seriesItem.contentType}:${seriesItem.contentId}`));
-        return {
-          ...item,
-          items: remainingItems,
-          updatedAt: remainingItems.length === item.items.length ? item.updatedAt : new Date().toISOString(),
-        };
-      });
-    const nextSeriesList = [nextSeries, ...otherSeries];
-    const membership = updateContentMembership(sermonRecords, studyRecords, series.id, removedItems, items);
+    const nextSeriesList = [nextSeries, ...allSeries.filter((item) => item.id !== series.id)];
 
     persistMembership({
       series: nextSeriesList,
-      sermons: membership.sermons,
-      studies: membership.studies,
+      sermons: withSermonMemberships(sermonRecords, nextSeriesList),
+      studies: withStudyMemberships(studyRecords, nextSeriesList),
     });
     return nextSeriesList.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   },
 
-  delete(id: string): Series[] {
-    const allSeries = seriesStorage.list();
-    const removed = allSeries.find((series) => series.id === id);
-    if (!removed) return allSeries;
+  saveSermons(sermons: Sermon[]): Sermon[] {
+    const allSeries = addLegacyAssociations(seriesStorage.list(), sermons, studyStorage.list());
+    sermons.forEach((sermon) => {
+      const selectedIds = sermon.seriesIds ?? (sermon.seriesId ? [sermon.seriesId] : []);
+      if (selectedIds.some((seriesId) => !allSeries.some((item) =>
+        item.id === seriesId && item.ownerId === sermon.ownerId,
+      ))) {
+        throw new Error("Uno de los sermones seleccionados no pertenece a esta biblioteca.");
+      }
+    });
+    const nextSeries = allSeries.map((item) => {
+      const requestedIds = new Set(sermons.flatMap((sermon) =>
+        (sermon.seriesIds ?? (sermon.seriesId ? [sermon.seriesId] : []))
+          .filter((seriesId) => seriesId === item.id && sermon.ownerId === item.ownerId)
+          .map((seriesId) => `${sermon.id}:${seriesId}`),
+      ));
+      const retained = item.items.filter((entry) =>
+        entry.contentType !== "sermon" || requestedIds.has(`${entry.contentId}:${item.id}`),
+      );
+      const retainedIds = new Set(retained
+        .filter((entry) => entry.contentType === "sermon")
+        .map((entry) => entry.contentId));
+      const additions = sermons
+        .filter((sermon) =>
+          sermon.ownerId === item.ownerId &&
+          (sermon.seriesIds ?? (sermon.seriesId ? [sermon.seriesId] : [])).includes(item.id) &&
+          !retainedIds.has(sermon.id),
+        )
+        .map((sermon, index) => ({
+          id: crypto.randomUUID(),
+          ownerId: item.ownerId,
+          seriesId: item.id,
+          contentId: sermon.id,
+          contentType: "sermon" as const,
+          order: retained.length + index,
+          createdAt: sermon.createdAt,
+          updatedAt: sermon.updatedAt,
+        }));
+      if (additions.length === 0 && retained.length === item.items.length) return item;
+      return {
+        ...item,
+        items: [...retained, ...additions].map((entry, order) => ({ ...entry, order })),
+        updatedAt: new Date().toISOString(),
+      };
+    });
 
-    const membership = updateContentMembership(
-      sermonStorage.list(),
-      studyStorage.list(),
-      id,
-      removed.items,
-      [],
-    );
+    const normalizedSermons = withSermonMemberships(sermons, nextSeries);
+    persistMembership({
+      series: nextSeries,
+      sermons: normalizedSermons,
+      studies: withStudyMemberships(studyStorage.list(), nextSeries),
+    });
+    return normalizedSermons;
+  },
+
+  delete(id: string): Series[] {
+    const allSeries = addLegacyAssociations(seriesStorage.list(), sermonStorage.list(), studyStorage.list());
     const nextSeries = allSeries.filter((series) => series.id !== id);
-    persistMembership({ series: nextSeries, ...membership });
-    return nextSeries;
+    persistMembership({
+      series: nextSeries,
+      sermons: withSermonMemberships(sermonStorage.list(), nextSeries),
+      studies: withStudyMemberships(studyStorage.list(), nextSeries),
+    });
+    return nextSeries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   },
 
   removeContent(contentId: string, contentType: SeriesItem["contentType"]): void {
@@ -149,10 +231,16 @@ export const seriesRepository = {
     }));
     const sermons = sermonStorage.list();
     const studies = studyStorage.list();
+    const remainingSermons = contentType === "sermon"
+      ? sermons.filter((sermon) => sermon.id !== contentId)
+      : sermons;
+    const remainingStudies = contentType === "study"
+      ? studies.filter((study) => study.id !== contentId)
+      : studies;
     persistMembership({
       series: nextSeries,
-      sermons: contentType === "sermon" ? sermons.filter((sermon) => sermon.id !== contentId) : sermons,
-      studies: contentType === "study" ? studies.filter((study) => study.id !== contentId) : studies,
+      sermons: withSermonMemberships(remainingSermons, nextSeries),
+      studies: withStudyMemberships(remainingStudies, nextSeries),
     });
   },
 };

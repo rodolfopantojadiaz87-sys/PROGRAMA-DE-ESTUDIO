@@ -91,10 +91,7 @@ export function DashboardPage() {
   const recentStudies = [...studies]
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
     .slice(0, 3);
-  const activeSeries = series.filter((item) => {
-    const todayDate = new Date().toISOString().slice(0, 10);
-    return (!item.startsOn || item.startsOn <= todayDate) && (!item.endsOn || item.endsOn >= todayDate);
-  });
+  const activeSeries = series.filter((item) => item.status === "active");
   const recentDocuments = [
     ...sermons.map((sermon) => ({
       id: sermon.id,

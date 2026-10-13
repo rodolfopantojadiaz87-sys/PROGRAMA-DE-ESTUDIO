@@ -12,6 +12,7 @@ function isSermon(value: unknown): value is Sermon {
     typeof sermon.mainBibleReference === "string" &&
     typeof sermon.topic === "string" &&
     (sermon.seriesId === null || typeof sermon.seriesId === "string") &&
+    (sermon.seriesIds === undefined || Array.isArray(sermon.seriesIds) && sermon.seriesIds.every((id) => typeof id === "string")) &&
     (sermon.date === null || typeof sermon.date === "string") &&
     typeof sermon.author === "string" &&
     ["draft", "prepared", "preached", "archived"].includes(sermon.status ?? "") &&
@@ -58,6 +59,7 @@ export const sermonStorage = {
     }
     return records.map((record) => ({
       ...record,
+      seriesIds: record.seriesIds ?? (record.seriesId ? [record.seriesId] : []),
       privateFields: record.privateFields ?? [],
     }));
   },

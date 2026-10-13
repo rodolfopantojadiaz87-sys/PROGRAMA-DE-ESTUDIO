@@ -21,7 +21,7 @@ type SortMode = "updated" | "date-desc" | "date-asc" | "title";
 
 const statusLabels: Record<ContentStatus, string> = {
   draft: "Borrador",
-  prepared: "Preparado",
+  prepared: "En preparación",
   preached: "Predicado",
   archived: "Archivado",
 };
@@ -67,6 +67,8 @@ function duplicateSermon(source: Sermon): Sermon {
     id: crypto.randomUUID(),
     title: `${source.title} (copia)`,
     status: "draft",
+    seriesId: null,
+    seriesIds: [],
     createdAt: now,
     updatedAt: now,
     sections: source.sections.map((section) => ({ ...section, id: crypto.randomUUID() })),
@@ -96,9 +98,13 @@ export function SermonsPage() {
     return sermons
       .filter((sermon) => {
         const searchableText = getSearchableText(sermon);
+        const belongsToSelectedSeries = !selectedSeries || series.some((item) =>
+          item.id === selectedSeries &&
+          item.items.some((seriesItem) => seriesItem.contentType === "sermon" && seriesItem.contentId === sermon.id),
+        );
         return (
           (!normalizedQuery || searchableText.includes(normalizedQuery)) &&
-          (!selectedSeries || sermon.seriesId === selectedSeries) &&
+          belongsToSelectedSeries &&
           (!selectedBook || getBook(sermon.mainBibleReference) === selectedBook) &&
           (!selectedTopic || sermon.topic === selectedTopic)
         );
@@ -111,7 +117,7 @@ export function SermonsPage() {
         }
         return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
       });
-  }, [sermons, query, selectedSeries, selectedBook, selectedTopic, sortMode]);
+  }, [sermons, series, query, selectedSeries, selectedBook, selectedTopic, sortMode]);
 
   function handleDelete(sermon: Sermon) {
     if (!window.confirm(`¿Estás seguro de que quieres eliminar "${sermon.title}"? Esta acción no se puede deshacer.`)) return;

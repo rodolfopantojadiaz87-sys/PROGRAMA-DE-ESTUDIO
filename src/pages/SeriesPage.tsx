@@ -5,16 +5,21 @@ import { Card } from "../components/ui/Card";
 import { useSeries } from "../hooks/useSeries";
 import { useSermons } from "../hooks/useSermons";
 import { useStudies } from "../hooks/useStudies";
-import type { Series } from "../types/domain";
+import type { ContentStatus, Series } from "../types/domain";
 
-function isActive(series: Series, today = new Date().toISOString().slice(0, 10)): boolean {
-  return (!series.startsOn || series.startsOn <= today) && (!series.endsOn || series.endsOn >= today);
+function getStatusLabel(series: Series): string {
+  if (series.status === "preparation") return "En preparación";
+  return series.status === "finished" ? "Finalizada" : "Activa";
 }
 
-function getStatusLabel(series: Series, today = new Date().toISOString().slice(0, 10)): string {
-  if (series.startsOn && series.startsOn > today) return "Programada";
-  if (series.endsOn && series.endsOn < today) return "Finalizada";
-  return "Activa";
+function getSeriesProgress(statuses: ContentStatus[]) {
+  return {
+    total: statuses.length,
+    pending: statuses.filter((status) => status === "draft").length,
+    preparing: statuses.filter((status) => status === "prepared").length,
+    preached: statuses.filter((status) => status === "preached").length,
+    archived: statuses.filter((status) => status === "archived").length,
+  };
 }
 
 function formatDate(date: string | null): string {
@@ -34,7 +39,7 @@ export function SeriesPage() {
     else setActionError("No se pudo eliminar la serie. Inténtalo de nuevo.");
   }
 
-  const activeCount = series.filter((item) => isActive(item)).length;
+  const activeCount = series.filter((item) => item.status === "active").length;
 
   return (
     <main aria-labelledby="series-title" className="sermons-page">
@@ -60,7 +65,7 @@ export function SeriesPage() {
           </Card>
           <Card className="summary-card">
             <div className="summary-topline"><span>Series activas</span><CalendarDays aria-hidden="true" size={17} /></div>
-            <strong>{activeCount}</strong><small>Según sus fechas</small>
+            <strong>{activeCount}</strong><small>Marcadas como activas</small>
           </Card>
         </section>
       )}
@@ -73,7 +78,7 @@ export function SeriesPage() {
             <Card className="series-card" key={item.id}>
               {item.imagePath && <img alt="" className="series-cover" loading="lazy" src={item.imagePath} />}
               <div className="series-card-top">
-                <span className={`status-badge ${isActive(item) ? "status-prepared" : "status-archived"}`}>
+                <span className={`status-badge ${item.status === "active" ? "status-prepared" : item.status === "finished" ? "status-archived" : "status-draft"}`}>
                   {getStatusLabel(item)}
                 </span>
                 <div className="sermon-menu">
@@ -88,12 +93,32 @@ export function SeriesPage() {
               </div>
               <h3>{item.name}</h3>
               {item.description && <p className="series-description">{item.description}</p>}
+              {(item.topic || item.mainBibleReference) && (
+                <p className="series-topic">
+                  {[item.topic, item.mainBibleReference].filter(Boolean).join(" · ")}
+                </p>
+              )}
               <div className="series-date-row">
                 {(item.startsOn || item.endsOn) && (
                   <span><CalendarDays aria-hidden="true" size={14} />{formatDate(item.startsOn)}{item.startsOn && item.endsOn ? " — " : ""}{formatDate(item.endsOn)}</span>
                 )}
-                <span>{item.items.length} {item.items.length === 1 ? "enseñanza" : "enseñanzas"}</span>
+                <span>{item.items.filter((entry) => entry.contentType === "sermon").length} {item.items.filter((entry) => entry.contentType === "sermon").length === 1 ? "sermón" : "sermones"}</span>
               </div>
+              {(() => {
+                const progress = getSeriesProgress(item.items
+                  .filter((entry) => entry.contentType === "sermon")
+                  .map((entry) => sermons.find((sermon) => sermon.id === entry.contentId)?.status)
+                  .filter((status): status is ContentStatus => Boolean(status)));
+                return (
+                  <p className="series-progress" aria-label={`Progreso: ${progress.total} sermones, ${progress.pending} pendientes, ${progress.preparing} en preparación, ${progress.preached} predicados`}>
+                    <strong>{progress.total} en total</strong>
+                    <span>{progress.pending} pendientes</span>
+                    <span>{progress.preparing} en preparación</span>
+                    <span>{progress.preached} predicados</span>
+                    {progress.archived > 0 && <span>{progress.archived} archivados</span>}
+                  </p>
+                );
+              })()}
               {item.items.length > 0 && (
                 <ol className="series-item-preview">
                   {item.items.slice(0, 3).map((seriesItem, index) => (
